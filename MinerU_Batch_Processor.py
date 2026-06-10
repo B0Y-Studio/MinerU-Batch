@@ -326,6 +326,8 @@ class MinerUApp:
         fmt_frame = ttk.LabelFrame(settings_frame, text="输出格式", padding=10)
         fmt_frame.pack(side=LEFT, fill=BOTH, expand=True, padx=(0, 5))
 
+        fmt_grid = ttk.Frame(fmt_frame)
+        fmt_grid.pack(fill=X)
         # 提示：Markdown + JSON 默认包含在 Zip 中，无需勾选
         ttk.Label(fmt_grid, text="✅ Markdown + JSON 默认包含在 Zip 中",
                   foreground="#666", font=("Segoe UI", 8)).grid(row=0, column=0, columnspan=2, sticky=W, padx=4, pady=(0, 4))
