@@ -209,6 +209,7 @@ class MinerUApp:
         self.save_html_var = BooleanVar(value=False)
         self.save_latex_var = BooleanVar(value=False)
         self.save_all_var = BooleanVar(value=False)
+        self.output_mode_var = StringVar(value="flat")  # "flat" | "subdir" | "zip"
         self.ocr_var = BooleanVar(value=False)   # 官网默认 false
         self.formula_var = BooleanVar(value=True)
         self.table_var = BooleanVar(value=True)
@@ -343,6 +344,17 @@ class MinerUApp:
         ttk.Label(dir_frame, text="输出目录:").pack(side=LEFT)
         ttk.Entry(dir_frame, textvariable=self.output_dir_var).pack(side=LEFT, fill=X, expand=True, padx=4)
         ttk.Button(dir_frame, text="浏览...", command=self._browse_output_dir).pack(side=LEFT)
+
+        # 输出模式
+        mode_frame = ttk.Frame(fmt_frame)
+        mode_frame.pack(fill=X, pady=(4, 0))
+        ttk.Label(mode_frame, text="输出模式:", font=("Segoe UI", 8, "bold")).pack(side=LEFT, padx=(0, 4))
+        ttk.Radiobutton(mode_frame, text="📁 平铺（推荐，所有 .md 在同一目录）",
+                        variable=self.output_mode_var, value="flat").pack(side=LEFT, padx=(0, 8))
+        ttk.Radiobutton(mode_frame, text="📂 独立子目录",
+                        variable=self.output_mode_var, value="subdir").pack(side=LEFT, padx=(0, 8))
+        ttk.Radiobutton(mode_frame, text="🗜 保留原始 Zip",
+                        variable=self.output_mode_var, value="zip").pack(side=LEFT)
 
         # 右列 - 处理选项
         opt_frame = ttk.LabelFrame(settings_frame, text="处理选项", padding=10)
@@ -741,37 +753,72 @@ class MinerUApp:
                     logger.info(f"  提取完成 (用时 {elapsed:.1f}s)")
 
                     # -- 保存 --
-                    saved_files = []
-
-                    # 创建以文件名命名的子目录
                     base_name = os.path.splitext(fname)[0]
-                    file_output_dir = os.path.join(output_dir, base_name)
-                    os.makedirs(file_output_dir, exist_ok=True)
+                    output_mode = self.output_mode_var.get()
 
-                    if self.save_all_var.get():
-                        # save_all 保存所有格式 + 图片
-                        p = result.save_all(file_output_dir)
-                        saved_files.append(str(p))
-                    else:
-                        if self.save_md_var.get():
-                            p = result.save_markdown(os.path.join(file_output_dir, f"{base_name}.md"))
-                            saved_files.append(str(p))
+                    if output_mode == "zip":
+                        # 模式1: 保留原始 Zip 压缩包（和官网在线解析一样）
+                        zip_dir = os.path.join(output_dir, "zips")
+                        os.makedirs(zip_dir, exist_ok=True)
+                        zip_path = os.path.join(zip_dir, f"{base_name}.zip")
+                        # 优先用 _zip_bytes，没有则从 zip_url 下载
+                        if result._zip_bytes is not None:
+                            Path(zip_path).write_bytes(result._zip_bytes)
+                        elif result.zip_url:
+                            zip_data = client._require_auth().download(result.zip_url)
+                            Path(zip_path).write_bytes(zip_data)
+                        else:
+                            # 没有 zip，回退到 save_all
+                            result.save_all(os.path.join(output_dir, base_name))
+                            logger.warning(f"  没有 Zip 数据，已保存到目录: {base_name}")
+                            zip_path = os.path.join(output_dir, base_name)
+                        logger.info(f"  ✓ Zip: {zip_path}")
+                        self._update_file_status(idx, "✓ Zip 已保存")
+
+                    elif output_mode == "flat":
+                        # 模式2: 平铺 — 所有 .md 直接放到输出目录
+                        if self.save_md_var.get() and result.markdown:
+                            md_path = os.path.join(output_dir, f"{base_name}.md")
+                            result.save_markdown(md_path, with_images=True)
+                            logger.info(f"  ✓ {base_name}.md")
                         if self.save_docx_var.get() and result.docx:
-                            p = result.save_docx(os.path.join(file_output_dir, f"{base_name}.docx"))
-                            saved_files.append(str(p))
+                            result.save_docx(os.path.join(output_dir, f"{base_name}.docx"))
+                            logger.info(f"  ✓ {base_name}.docx")
                         if self.save_html_var.get() and result.html:
-                            p = result.save_html(os.path.join(file_output_dir, f"{base_name}.html"))
-                            saved_files.append(str(p))
+                            result.save_html(os.path.join(output_dir, f"{base_name}.html"))
+                            logger.info(f"  ✓ {base_name}.html")
                         if self.save_latex_var.get() and result.latex:
-                            p = result.save_latex(os.path.join(file_output_dir, f"{base_name}.tex"))
-                            saved_files.append(str(p))
-                        # 如果有图片且没选 save_all, 仍保存 MD + 图片
-                        if self.save_md_var.get() and result.images and not self.save_all_var.get():
-                            # save_markdown 已自动保存图片
-                            pass
+                            result.save_latex(os.path.join(output_dir, f"{base_name}.tex"))
+                            logger.info(f"  ✓ {base_name}.tex")
+                        if self.save_all_var.get() and result._zip_bytes:
+                            result.save_all(os.path.join(output_dir, base_name))
+                            logger.info(f"  ✓ 已解压全部文件到: {base_name}/")
+                        self._update_file_status(idx, "✓ 完成")
 
-                    logger.info(f"  ✓ 已保存 {len(saved_files) or 'Markdown'} 个文件到 {file_output_dir}")
-                    self._update_file_status(idx, "✓ 完成")
+                    else:
+                        # 模式3: 独立子目录（原来的行为）
+                        file_output_dir = os.path.join(output_dir, base_name)
+                        os.makedirs(file_output_dir, exist_ok=True)
+
+                        if self.save_all_var.get() and result._zip_bytes:
+                            result.save_all(file_output_dir)
+                            logger.info(f"  ✓ 已解压到: {base_name}/")
+                        else:
+                            saved = []
+                            if self.save_md_var.get() and result.markdown:
+                                result.save_markdown(os.path.join(file_output_dir, f"{base_name}.md"))
+                                saved.append("md")
+                            if self.save_docx_var.get() and result.docx:
+                                result.save_docx(os.path.join(file_output_dir, f"{base_name}.docx"))
+                                saved.append("docx")
+                            if self.save_html_var.get() and result.html:
+                                result.save_html(os.path.join(file_output_dir, f"{base_name}.html"))
+                                saved.append("html")
+                            if self.save_latex_var.get() and result.latex:
+                                result.save_latex(os.path.join(file_output_dir, f"{base_name}.tex"))
+                                saved.append("tex")
+                            logger.info(f"  ✓ 已保存 {', '.join(saved)} 到 {base_name}/")
+                        self._update_file_status(idx, "✓ 完成")
                     successful += 1
 
                 except mineru.AuthError:
