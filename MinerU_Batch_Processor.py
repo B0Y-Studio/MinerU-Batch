@@ -50,8 +50,11 @@ def _patched_build_options(
     language: object,
     extra_formats: list[str] | None,
 ) -> dict:
-    """改良版 _build_options: 不发送 model_version 字段"""
-    opts: dict = {}  # ← 关键: 不再包含 model_version
+    """改良版 _build_options: 仅在用户明确选择时发送 model_version"""
+    opts: dict = {}
+    # 仅在用户明确选择了非默认模型时才发送
+    if model_version and model_version != "pipeline":
+        opts["model_version"] = model_version
     if formula is not _SENTINEL:
         opts["enable_formula"] = formula
     if table is not _SENTINEL:
@@ -141,10 +144,14 @@ LANGUAGES = [
     ("阿拉伯文", "ar"), ("俄文", "ru"), ("自动检测", "auto"),
 ]
 MODELS = [
-    ("默认模型", ""),
-    ("精确模式（含 PDF 解析优化）", "p2p"),
-    ("快速模式（优先速度）", "fast"),
+    ("pipeline（通用解析）", "pipeline"),
+    ("vlm（高精度，推荐）", "vlm"),
+    ("MinerU-HTML（HTML 专用）", "MinerU-HTML"),
 ]
+
+# API 限制
+MAX_FILE_SIZE = 200 * 1024 * 1024        # 200 MB
+MAX_BATCH_COUNT = 200                    # 批量上限 200 个
 
 # ========== 日志 ==========
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
@@ -202,7 +209,7 @@ class MinerUApp:
         self.save_html_var = BooleanVar(value=False)
         self.save_latex_var = BooleanVar(value=False)
         self.save_all_var = BooleanVar(value=False)
-        self.ocr_var = BooleanVar(value=True)
+        self.ocr_var = BooleanVar(value=False)   # 官网默认 false
         self.formula_var = BooleanVar(value=True)
         self.table_var = BooleanVar(value=True)
         self.language_var = StringVar(value="ch")
@@ -319,13 +326,14 @@ class MinerUApp:
         fmt_frame = ttk.LabelFrame(settings_frame, text="输出格式", padding=10)
         fmt_frame.pack(side=LEFT, fill=BOTH, expand=True, padx=(0, 5))
 
-        fmt_grid = ttk.Frame(fmt_frame)
-        fmt_grid.pack(fill=X)
-        ttk.Checkbutton(fmt_grid, text="Markdown (.md)", variable=self.save_md_var).grid(row=0, column=0, sticky=W, padx=4, pady=2)
-        ttk.Checkbutton(fmt_grid, text="DOCX (.docx)", variable=self.save_docx_var).grid(row=0, column=1, sticky=W, padx=4, pady=2)
-        ttk.Checkbutton(fmt_grid, text="HTML (.html)", variable=self.save_html_var).grid(row=1, column=0, sticky=W, padx=4, pady=2)
-        ttk.Checkbutton(fmt_grid, text="LaTeX (.tex)", variable=self.save_latex_var).grid(row=1, column=1, sticky=W, padx=4, pady=2)
-        ttk.Checkbutton(fmt_grid, text="保存全部（含图片）", variable=self.save_all_var).grid(row=2, column=0, columnspan=2, sticky=W, padx=4, pady=2)
+        # 提示：Markdown + JSON 默认包含在 Zip 中，无需勾选
+        ttk.Label(fmt_grid, text="✅ Markdown + JSON 默认包含在 Zip 中",
+                  foreground="#666", font=("Segoe UI", 8)).grid(row=0, column=0, columnspan=2, sticky=W, padx=4, pady=(0, 4))
+        ttk.Checkbutton(fmt_grid, text="Markdown (.md) 提取到目录", variable=self.save_md_var).grid(row=1, column=0, columnspan=2, sticky=W, padx=4, pady=1)
+        ttk.Checkbutton(fmt_grid, text="额外导出 DOCX (.docx)", variable=self.save_docx_var).grid(row=2, column=0, sticky=W, padx=4, pady=1)
+        ttk.Checkbutton(fmt_grid, text="额外导出 HTML (.html)", variable=self.save_html_var).grid(row=2, column=1, sticky=W, padx=4, pady=1)
+        ttk.Checkbutton(fmt_grid, text="额外导出 LaTeX (.tex)", variable=self.save_latex_var).grid(row=3, column=0, sticky=W, padx=4, pady=1)
+        ttk.Checkbutton(fmt_grid, text="保存全部（含图片到目录）", variable=self.save_all_var).grid(row=3, column=1, sticky=W, padx=4, pady=1)
 
         # 输出目录
         dir_frame = ttk.Frame(fmt_frame)
@@ -339,8 +347,14 @@ class MinerUApp:
         opt_frame.pack(side=LEFT, fill=BOTH, expand=True, padx=(5, 0))
 
         ttk.Checkbutton(opt_frame, text="启用 OCR（文字识别）", variable=self.ocr_var).pack(anchor=W, pady=1)
+        ttk.Label(opt_frame, text="  ⚠ 仅对 pipeline / vlm 模型有效",
+                  foreground="#888", font=("Segoe UI", 8)).pack(anchor=W, padx=20, pady=(0, 2))
         ttk.Checkbutton(opt_frame, text="启用公式识别", variable=self.formula_var).pack(anchor=W, pady=1)
         ttk.Checkbutton(opt_frame, text="启用表格识别", variable=self.table_var).pack(anchor=W, pady=1)
+        # 限制信息
+        ttk.Separator(opt_frame, orient=HORIZONTAL).pack(fill=X, pady=(8, 4))
+        ttk.Label(opt_frame, text="📋 限制: 单文件 ≤200MB / ≤200页 / 批量 ≤200个",
+                  foreground="#888", font=("Segoe UI", 8)).pack(anchor=W)
 
         # 语言选择
         lang_row = ttk.Frame(opt_frame)
@@ -361,7 +375,7 @@ class MinerUApp:
         ttk.Label(model_row, text="处理模型:").pack(side=LEFT)
         model_menu = ttk.Combobox(model_row, textvariable=self.model_var, state="readonly", width=14)
         model_menu["values"] = [f"{label}" for label, _ in MODELS]
-        model_menu.set("默认模型")
+        model_menu.set("pipeline（通用解析）")
         model_menu.pack(side=LEFT, padx=4)
         self.model_map = {label: val for label, val in MODELS}
         model_menu.bind("<<ComboboxSelected>>", lambda e: None)
@@ -398,32 +412,52 @@ class MinerUApp:
         # ========== Tab 3: 帮助 ==========
         tab_help = ttk.Frame(notebook, padding=15)
         notebook.add(tab_help, text="❓ 帮助")
-        help_text = """📄 MinerU 文档批量处理工具
+        help_text = """📄 MinerU 文档批量处理工具 — 官网 API v4 版
 
 使用说明：
 1. 在「API 配置」中填入你的 MinerU Token（API Key）
-2. 选择要处理的文件或整个文件夹
-   - 支持 PDF、Office文档、图片、纯文本等多种格式
-3. 选择输出格式（至少勾选一种）
-4. 配置处理选项（OCR、公式、表格等）
-5. 点击「开始处理」批量上传并提取内容
+2. 选择要处理的文件或整个文件夹（支持 PDF / Office / 图片等）
+3. 选择输出格式和解析模型
+4. 点击「开始处理」→ 异步提交 → 自动轮询 → 保存结果
 
-输出格式说明：
-- Markdown：结构化文本，适合阅读和二次处理
-- DOCX：Word 文档格式
-- HTML：网页格式
-- LaTeX：学术排版格式
-- 保存全部：包含所有格式及提取的图片
+━━━━ 鉴权方式 ━━━━━━━━━━━━━━━━━━━━━━
+调用需通过 Token 进行身份验证，填写于上方 API 配置区。
+也可设置环境变量 MINERU_TOKEN，启动时自动读取。
 
-获取 Token：
+━━━━ 接口地址 ━━━━━━━━━━━━━━━━━━━━━━
+- 任务提交：  POST /api/v4/extract/task          （URL 直接提交）
+- 批量文件：  POST /api/v4/file-urls/batch       （本地上传）
+- 结果查询：  GET  /api/v4/extract-results/batch/{batch_id}
+
+━━━━ 模型说明 ━━━━━━━━━━━━━━━━━━━━━━
+- pipeline（默认）   通用解析模型，适合大多数文档
+- vlm（推荐）        基于视觉语言模型的高精度解析（效果更好）
+- MinerU-HTML       HTML 格式输出的专用模型
+
+━━━━ 处理限制 ━━━━━━━━━━━━━━━━━━━━━━
+- 单文件大小： ≤ 200 MB
+- 单文件页数： ≤ 200 页
+- 批量上限：   ≤ 200 个文件
+
+━━━━ 输出格式 ━━━━━━━━━━━━━━━━━━━━━━
+- 默认返回： Zip 压缩包（内含 Markdown + JSON）
+- 额外导出： DOCX / HTML / LaTeX（需在界面勾选）
+- 保存全部： 解压 Zip + 图片到独立子目录
+
+━━━━ 调用方式 ━━━━━━━━━━━━━━━━━━━━━━
+异步处理模式：
+  提交任务 → 轮询获取结果 → 自动下载保存
+支持中途取消当前批次处理。
+
+━━━━ 注意事项 ━━━━━━━━━━━━━━━━━━━━━━
+- OCR 功能 默认关闭，仅对 pipeline / vlm 模型有效
+- 每次处理会消耗账户配额（每日 1000 页优先额度）
+- 上传链接 24 小时有效，超时需重新提交
+
+━━━━ 获取 Token ━━━━━━━━━━━━━━━━━━━━
 1. 访问 https://mineru.net 注册账号
-2. 在个人设置中找到 API Token
-3. 复制粘贴到本工具的 Token 输入框
-
-提示：
-- Token 可以保存在环境变量 MINERU_TOKEN 中
-- 处理大量文件时请耐心等待
-- 点击「取消」可以停止当前批次处理"""
+2. 进入个人设置 → API Token
+3. 复制 Token 粘贴到本工具输入框"""
         help_widget = Text(tab_help, wrap=WORD, font=("Segoe UI", 10),
                            bg=self.root.cget("bg"), relief=FLAT, padx=10, pady=10)
         help_widget.insert("1.0", help_text)
@@ -571,6 +605,25 @@ class MinerUApp:
         # 验证文件列表
         if not self.file_list:
             messagebox.showerror("错误", "请先添加要处理的文件")
+            return
+
+        # 验证批量限制 (≤200)
+        if len(self.file_list) > MAX_BATCH_COUNT:
+            messagebox.showerror("错误",
+                f"批量处理上限为 {MAX_BATCH_COUNT} 个文件\n"
+                f"当前选择了 {len(self.file_list)} 个，请分批处理")
+            return
+
+        # 验证文件大小限制 (≤200MB)
+        oversized = []
+        for path, _ in self.file_list:
+            size = os.path.getsize(path)
+            if size > MAX_FILE_SIZE:
+                oversized.append((os.path.basename(path), size))
+        if oversized:
+            msg = "\n".join([f"  • {name} ({self._format_size(s)})" for name, s in oversized])
+            messagebox.showerror("文件过大",
+                f"以下文件超过 200MB 限制，无法处理:\n{msg}")
             return
 
         # 验证输出格式
