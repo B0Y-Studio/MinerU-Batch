@@ -20,7 +20,6 @@ from tkinter import ttk, filedialog, messagebox, scrolledtext
 try:
     import mineru
 except ImportError:
-    # 尝试从 site-packages 加载
     import subprocess
     result = subprocess.run(
         [sys.executable, "-m", "pip", "show", "mineru-open-sdk"],
@@ -29,6 +28,103 @@ except ImportError:
     if result.returncode != 0:
         messagebox.showerror("缺少依赖", "请先安装 MinerU SDK:\npip install mineru-open-sdk")
         sys.exit(1)
+
+# ── SDK 兼容补丁 ──────────────────────────────────────────
+# 问题: 新版 MinerU API 移除了 model_version 字段支持，SDK v0.2.5 仍发送该字段
+# 导致服务端返回 [-10002] field "version" is invalid
+# 解决方案: 创建自定义提取函数绕过有问题的字段
+
+import httpx
+from typing import Iterator
+
+# 保存原 SDK 引用
+_mineru_extract = mineru.MinerU.extract
+_mineru_extract_batch = mineru.MinerU.extract_batch
+
+_SENTINEL = object()
+
+def _patched_build_options(
+    model_version: str,
+    formula: object,
+    table: object,
+    language: object,
+    extra_formats: list[str] | None,
+) -> dict:
+    """改良版 _build_options: 不发送 model_version 字段"""
+    opts: dict = {}  # ← 关键: 不再包含 model_version
+    if formula is not _SENTINEL:
+        opts["enable_formula"] = formula
+    if table is not _SENTINEL:
+        opts["enable_table"] = table
+    if language is not _SENTINEL:
+        opts["language"] = language
+    if extra_formats:
+        opts["extra_formats"] = extra_formats
+    return opts
+
+def _patched_extract(
+    self,
+    source: str,
+    *,
+    model: str | None = None,
+    ocr: bool | None = None,
+    formula: object = _SENTINEL,
+    table: object = _SENTINEL,
+    language: object = _SENTINEL,
+    pages: str | None = None,
+    extra_formats: list[str] | None = None,
+    file_params: dict[str, "mineru.FileParam"] | None = None,
+    timeout: int = 300,
+) -> "mineru.ExtractResult":
+    """改良版 extract: 不发送 model_version 字段"""
+    from mineru.client import _resolve_model
+
+    model_version = _resolve_model(model, source) if model else "pipeline"
+    self._require_auth()
+    opts = _patched_build_options(model_version, formula, table, language, extra_formats)
+
+    if source.startswith("http://") or source.startswith("https://"):
+        batch_id = self._submit_urls_batch([source], opts, ocr, pages, file_params)
+    else:
+        batch_id = self._upload_and_submit([source], opts, ocr, pages, file_params)
+    results = self._wait_batch(batch_id, timeout)
+    return results[0]
+
+def _patched_extract_batch(
+    self,
+    sources: list[str],
+    *,
+    model: str | None = None,
+    ocr: bool | None = None,
+    formula: object = _SENTINEL,
+    table: object = _SENTINEL,
+    language: object = _SENTINEL,
+    extra_formats: list[str] | None = None,
+    file_params: dict[str, "mineru.FileParam"] | None = None,
+    timeout: int = 1800,
+) -> Iterator["mineru.ExtractResult"]:
+    """改良版 extract_batch: 不发送 model_version 字段"""
+    from mineru.client import _resolve_model
+
+    first_source = sources[0] if sources else ""
+    model_version = _resolve_model(model, first_source) if model else "pipeline"
+    self._require_auth()
+    opts = _patched_build_options(model_version, formula, table, language, extra_formats)
+
+    urls = [s for s in sources if s.startswith(("http://", "https://"))]
+    files = [s for s in sources if not s.startswith(("http://", "https://"))]
+
+    batch_ids: list[str] = []
+    if urls:
+        batch_ids.append(self._submit_urls_batch(urls, opts, ocr, None, file_params))
+    if files:
+        batch_ids.append(self._upload_and_submit(files, opts, ocr, None, file_params))
+
+    yield from self._yield_batch(batch_ids, len(sources), timeout)
+
+# 应用补丁
+mineru.MinerU.extract = _patched_extract
+mineru.MinerU.extract_batch = _patched_extract_batch
 
 # ========== 常量 ==========
 DEFAULT_BASE_URL = "https://mineru.net/api/v4"
@@ -571,16 +667,20 @@ class MinerUApp:
                 file_start = time.time()
                 try:
                     # -- 单文件提取 --
-                    result = client.extract(
-                        source=source,
-                        model=model if model else None,
-                        ocr=ocr,
-                        formula=formula if formula else None,
-                        table=table if table else None,
-                        language=language if language else None,
-                        extra_formats=extra_formats if extra_formats else None,
-                        timeout=300,
-                    )
+                    # 仅传非空参数，避免服务端收到 null 值时报错
+                    extract_kwargs = dict(source=source, timeout=300)
+                    if ocr is not None:
+                        extract_kwargs["ocr"] = ocr
+                    # formula/table/language：默认为 True，传入 False 才表示关闭
+                    if formula is not None:
+                        extract_kwargs["formula"] = formula
+                    if table is not None:
+                        extract_kwargs["table"] = table
+                    if language is not None:
+                        extract_kwargs["language"] = language
+                    if extra_formats:
+                        extract_kwargs["extra_formats"] = extra_formats
+                    result = client.extract(**extract_kwargs)
 
                     elapsed = time.time() - file_start
                     logger.info(f"  提取完成 (用时 {elapsed:.1f}s)")
