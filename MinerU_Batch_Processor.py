@@ -334,16 +334,16 @@ class MinerUApp:
         ttk.Entry(dir_frame, textvariable=self.output_dir_var).pack(side=LEFT, fill=X, expand=True, padx=4)
         ttk.Button(dir_frame, text="浏览...", command=self._browse_output_dir).pack(side=LEFT)
 
-        # 输出模式（缩到一行）
+        # 输出模式
         mode_frame = ttk.Frame(fmt_frame)
         mode_frame.pack(fill=X, pady=(2, 0))
         ttk.Label(mode_frame, text="模式:", font=("Segoe UI", 8, "bold")).pack(side=LEFT, padx=(0, 4))
-        ttk.Radiobutton(mode_frame, text="📁 平铺", variable=self.output_mode_var,
-                        value="flat").pack(side=LEFT, padx=(0, 6))
-        ttk.Radiobutton(mode_frame, text="📂 子目录", variable=self.output_mode_var,
-                        value="subdir").pack(side=LEFT, padx=(0, 6))
-        ttk.Radiobutton(mode_frame, text="🗜 Zip", variable=self.output_mode_var,
-                        value="zip").pack(side=LEFT)
+        ttk.Radiobutton(mode_frame, text="📁 平铺（推荐，所有 .md 在同一目录）",
+                        variable=self.output_mode_var, value="flat").pack(side=LEFT, padx=(0, 6))
+        ttk.Radiobutton(mode_frame, text="📂 独立子目录",
+                        variable=self.output_mode_var, value="subdir").pack(side=LEFT, padx=(0, 6))
+        ttk.Radiobutton(mode_frame, text="🗜 保留原始 Zip",
+                        variable=self.output_mode_var, value="zip").pack(side=LEFT)
 
         # 右列 - 处理选项
         opt_frame = ttk.LabelFrame(settings_frame, text="处理选项", padding=8)
