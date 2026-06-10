@@ -215,7 +215,6 @@ class MinerUApp:
         self.table_var = BooleanVar(value=True)
         self.language_var = StringVar(value="ch")
         self.model_var = StringVar(value="")
-        self.select_mode = StringVar(value="file")  # "file" or "folder"
 
         # ---------- 构建界面 ----------
         self._build_ui()
@@ -275,22 +274,18 @@ class MinerUApp:
         file_frame = ttk.LabelFrame(tab_main, text="文件选择", padding=8)
         file_frame.pack(fill=X, pady=(0, 8))
 
-        # 选择模式 + 按钮行（合并到一行）
+        # 添加文件按钮行
         top_row = ttk.Frame(file_frame)
         top_row.pack(fill=X, pady=(0, 4))
-        ttk.Radiobutton(top_row, text="📄 选择文件", variable=self.select_mode,
-                        value="file", command=self._on_mode_change).pack(side=LEFT, padx=(0, 10))
-        ttk.Radiobutton(top_row, text="📁 选择文件夹", variable=self.select_mode,
-                        value="folder", command=self._on_mode_change).pack(side=LEFT, padx=(0, 15))
         self.add_btn = ttk.Button(top_row, text="📂 添加文件...", command=self._add_files)
         self.add_btn.pack(side=LEFT, padx=(0, 4))
         self.add_folder_btn = ttk.Button(top_row, text="📁 添加文件夹...", command=self._add_folder)
         self.add_folder_btn.pack(side=LEFT, padx=(0, 4))
         self.clear_btn = ttk.Button(top_row, text="🗑 清空", command=self._clear_files)
         self.clear_btn.pack(side=LEFT, padx=(0, 4))
-        self.remove_sel_btn = ttk.Button(top_row, text="✂ 移除", command=self._remove_selected)
+        self.remove_sel_btn = ttk.Button(top_row, text="✂ 移除选中", command=self._remove_selected)
         self.remove_sel_btn.pack(side=LEFT, padx=(0, 10))
-        self.file_count_label = ttk.Label(top_row, text="已选择 0 个文件", style="Counter.TLabel")
+        self.file_count_label = ttk.Label(top_row, text="已选择 0 个文件")
         self.file_count_label.pack(side=RIGHT)
 
         # 文件列表（固定高度，不撑开）
@@ -324,13 +319,13 @@ class MinerUApp:
 
         fmt_grid = ttk.Frame(fmt_frame)
         fmt_grid.pack(fill=X)
-        ttk.Label(fmt_grid, text="✅ Markdown + JSON 默认在 Zip 中",
-                  foreground="#666", font=("Segoe UI", 8)).grid(row=0, column=0, columnspan=2, sticky=W, padx=2, pady=(0, 2))
-        ttk.Checkbutton(fmt_grid, text="提取 .md 到目录", variable=self.save_md_var).grid(row=1, column=0, columnspan=2, sticky=W, padx=2, pady=0)
-        ttk.Checkbutton(fmt_grid, text="DOCX", variable=self.save_docx_var).grid(row=2, column=0, sticky=W, padx=2, pady=0)
-        ttk.Checkbutton(fmt_grid, text="HTML", variable=self.save_html_var).grid(row=2, column=1, sticky=W, padx=2, pady=0)
-        ttk.Checkbutton(fmt_grid, text="LaTeX", variable=self.save_latex_var).grid(row=3, column=0, sticky=W, padx=2, pady=0)
-        ttk.Checkbutton(fmt_grid, text="全部（含图片）", variable=self.save_all_var).grid(row=3, column=1, sticky=W, padx=2, pady=0)
+        ttk.Label(fmt_grid, text="✅ Markdown + JSON 默认包含在 Zip 中",
+                  foreground="#666", font=("Segoe UI", 8)).grid(row=0, column=0, columnspan=2, sticky=W, padx=4, pady=(0, 4))
+        ttk.Checkbutton(fmt_grid, text="Markdown (.md) 提取到目录", variable=self.save_md_var).grid(row=1, column=0, columnspan=2, sticky=W, padx=4, pady=1)
+        ttk.Checkbutton(fmt_grid, text="额外导出 DOCX (.docx)", variable=self.save_docx_var).grid(row=2, column=0, sticky=W, padx=4, pady=1)
+        ttk.Checkbutton(fmt_grid, text="额外导出 HTML (.html)", variable=self.save_html_var).grid(row=2, column=1, sticky=W, padx=4, pady=1)
+        ttk.Checkbutton(fmt_grid, text="额外导出 LaTeX (.tex)", variable=self.save_latex_var).grid(row=3, column=0, sticky=W, padx=4, pady=1)
+        ttk.Checkbutton(fmt_grid, text="保存全部（含图片到目录）", variable=self.save_all_var).grid(row=3, column=1, sticky=W, padx=4, pady=1)
 
         # 输出目录
         dir_frame = ttk.Frame(fmt_frame)
@@ -493,8 +488,7 @@ class MinerUApp:
             self.token_entry.configure(show="*")
             self.token_btn.configure(text="👁")
 
-    def _on_mode_change(self):
-        pass  # 模式只是改变按钮行为
+
 
     def _add_files(self):
         files = filedialog.askopenfilenames(
