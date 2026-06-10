@@ -181,8 +181,8 @@ class MinerUApp:
     def __init__(self, root):
         self.root = root
         self.root.title("MinerU 文档批量处理工具 v1.0")
-        self.root.geometry("880x780")
-        self.root.minsize(800, 700)
+        self.root.geometry("920x820")
+        self.root.minsize(860, 700)
 
         # 设置样式
         style = ttk.Style()
@@ -250,12 +250,12 @@ class MinerUApp:
         notebook.pack(fill=BOTH, expand=True)
 
         # ========== Tab 1: 主操作 ==========
-        tab_main = ttk.Frame(notebook, padding=10)
+        tab_main = ttk.Frame(notebook, padding=8)
         notebook.add(tab_main, text="⚙ 批量处理")
 
         # ---- API 配置 ----
-        api_frame = ttk.LabelFrame(tab_main, text="API 配置", padding=10)
-        api_frame.pack(fill=X, pady=(0, 10))
+        api_frame = ttk.LabelFrame(tab_main, text="API 配置", padding=8)
+        api_frame.pack(fill=X, pady=(0, 8))
 
         row1 = ttk.Frame(api_frame)
         row1.pack(fill=X, pady=2)
@@ -272,38 +272,33 @@ class MinerUApp:
         ttk.Button(row2, text="恢复默认", command=lambda: self.base_url_var.set(DEFAULT_BASE_URL)).pack(side=LEFT)
 
         # ---- 文件选择 ----
-        file_frame = ttk.LabelFrame(tab_main, text="文件选择", padding=10)
-        file_frame.pack(fill=BOTH, expand=True, pady=(0, 10))
+        file_frame = ttk.LabelFrame(tab_main, text="文件选择", padding=8)
+        file_frame.pack(fill=X, pady=(0, 8))
 
-        # 选择模式
-        mode_row = ttk.Frame(file_frame)
-        mode_row.pack(fill=X, pady=(0, 6))
-        ttk.Radiobutton(mode_row, text="选择单个/多个文件", variable=self.select_mode,
-                        value="file", command=self._on_mode_change).pack(side=LEFT, padx=(0, 20))
-        ttk.Radiobutton(mode_row, text="选择整个文件夹", variable=self.select_mode,
-                        value="folder", command=self._on_mode_change).pack(side=LEFT)
-        ttk.Label(mode_row, text="", style="Counter.TLabel").pack(side=LEFT, padx=10)
-        self.file_count_label = ttk.Label(mode_row, text="已选择 0 个文件", style="Counter.TLabel")
+        # 选择模式 + 按钮行（合并到一行）
+        top_row = ttk.Frame(file_frame)
+        top_row.pack(fill=X, pady=(0, 4))
+        ttk.Radiobutton(top_row, text="📄 选择文件", variable=self.select_mode,
+                        value="file", command=self._on_mode_change).pack(side=LEFT, padx=(0, 10))
+        ttk.Radiobutton(top_row, text="📁 选择文件夹", variable=self.select_mode,
+                        value="folder", command=self._on_mode_change).pack(side=LEFT, padx=(0, 15))
+        self.add_btn = ttk.Button(top_row, text="📂 添加文件...", command=self._add_files)
+        self.add_btn.pack(side=LEFT, padx=(0, 4))
+        self.add_folder_btn = ttk.Button(top_row, text="📁 添加文件夹...", command=self._add_folder)
+        self.add_folder_btn.pack(side=LEFT, padx=(0, 4))
+        self.clear_btn = ttk.Button(top_row, text="🗑 清空", command=self._clear_files)
+        self.clear_btn.pack(side=LEFT, padx=(0, 4))
+        self.remove_sel_btn = ttk.Button(top_row, text="✂ 移除", command=self._remove_selected)
+        self.remove_sel_btn.pack(side=LEFT, padx=(0, 10))
+        self.file_count_label = ttk.Label(top_row, text="已选择 0 个文件", style="Counter.TLabel")
         self.file_count_label.pack(side=RIGHT)
 
-        # 按钮行
-        btn_row = ttk.Frame(file_frame)
-        btn_row.pack(fill=X, pady=(0, 6))
-        self.add_btn = ttk.Button(btn_row, text="📂 添加文件...", command=self._add_files)
-        self.add_btn.pack(side=LEFT, padx=(0, 6))
-        self.add_folder_btn = ttk.Button(btn_row, text="📁 添加文件夹...", command=self._add_folder)
-        self.add_folder_btn.pack(side=LEFT, padx=(0, 6))
-        self.clear_btn = ttk.Button(btn_row, text="🗑 清空列表", command=self._clear_files)
-        self.clear_btn.pack(side=LEFT, padx=(0, 6))
-        self.remove_sel_btn = ttk.Button(btn_row, text="✂ 移除选中", command=self._remove_selected)
-        self.remove_sel_btn.pack(side=LEFT)
-
-        # 文件列表
+        # 文件列表（固定高度，不撑开）
         list_container = ttk.Frame(file_frame)
-        list_container.pack(fill=BOTH, expand=True)
+        list_container.pack(fill=X, pady=(0, 0))
         columns = ("序号", "文件名", "大小", "状态")
         self.file_tree = ttk.Treeview(list_container, columns=columns,
-                                       show="headings", height=8, selectmode="extended")
+                                       show="headings", height=5, selectmode="extended")
         self.file_tree.heading("序号", text="#", anchor=CENTER)
         self.file_tree.heading("文件名", text="文件名")
         self.file_tree.heading("大小", text="大小", anchor=E)
@@ -321,59 +316,58 @@ class MinerUApp:
 
         # ---- 输出设置 + 处理选项 (两列) ----
         settings_frame = ttk.Frame(tab_main)
-        settings_frame.pack(fill=X, pady=(0, 10))
+        settings_frame.pack(fill=X, pady=(0, 6))
 
         # 左列 - 输出格式
-        fmt_frame = ttk.LabelFrame(settings_frame, text="输出格式", padding=10)
+        fmt_frame = ttk.LabelFrame(settings_frame, text="输出格式", padding=8)
         fmt_frame.pack(side=LEFT, fill=BOTH, expand=True, padx=(0, 5))
 
         fmt_grid = ttk.Frame(fmt_frame)
         fmt_grid.pack(fill=X)
-        # 提示：Markdown + JSON 默认包含在 Zip 中，无需勾选
-        ttk.Label(fmt_grid, text="✅ Markdown + JSON 默认包含在 Zip 中",
-                  foreground="#666", font=("Segoe UI", 8)).grid(row=0, column=0, columnspan=2, sticky=W, padx=4, pady=(0, 4))
-        ttk.Checkbutton(fmt_grid, text="Markdown (.md) 提取到目录", variable=self.save_md_var).grid(row=1, column=0, columnspan=2, sticky=W, padx=4, pady=1)
-        ttk.Checkbutton(fmt_grid, text="额外导出 DOCX (.docx)", variable=self.save_docx_var).grid(row=2, column=0, sticky=W, padx=4, pady=1)
-        ttk.Checkbutton(fmt_grid, text="额外导出 HTML (.html)", variable=self.save_html_var).grid(row=2, column=1, sticky=W, padx=4, pady=1)
-        ttk.Checkbutton(fmt_grid, text="额外导出 LaTeX (.tex)", variable=self.save_latex_var).grid(row=3, column=0, sticky=W, padx=4, pady=1)
-        ttk.Checkbutton(fmt_grid, text="保存全部（含图片到目录）", variable=self.save_all_var).grid(row=3, column=1, sticky=W, padx=4, pady=1)
+        ttk.Label(fmt_grid, text="✅ Markdown + JSON 默认在 Zip 中",
+                  foreground="#666", font=("Segoe UI", 8)).grid(row=0, column=0, columnspan=2, sticky=W, padx=2, pady=(0, 2))
+        ttk.Checkbutton(fmt_grid, text="提取 .md 到目录", variable=self.save_md_var).grid(row=1, column=0, columnspan=2, sticky=W, padx=2, pady=0)
+        ttk.Checkbutton(fmt_grid, text="DOCX", variable=self.save_docx_var).grid(row=2, column=0, sticky=W, padx=2, pady=0)
+        ttk.Checkbutton(fmt_grid, text="HTML", variable=self.save_html_var).grid(row=2, column=1, sticky=W, padx=2, pady=0)
+        ttk.Checkbutton(fmt_grid, text="LaTeX", variable=self.save_latex_var).grid(row=3, column=0, sticky=W, padx=2, pady=0)
+        ttk.Checkbutton(fmt_grid, text="全部（含图片）", variable=self.save_all_var).grid(row=3, column=1, sticky=W, padx=2, pady=0)
 
         # 输出目录
         dir_frame = ttk.Frame(fmt_frame)
-        dir_frame.pack(fill=X, pady=(6, 0))
-        ttk.Label(dir_frame, text="输出目录:").pack(side=LEFT)
+        dir_frame.pack(fill=X, pady=(4, 0))
+        ttk.Label(dir_frame, text="输出目录:", font=("Segoe UI", 8, "bold")).pack(side=LEFT)
         ttk.Entry(dir_frame, textvariable=self.output_dir_var).pack(side=LEFT, fill=X, expand=True, padx=4)
         ttk.Button(dir_frame, text="浏览...", command=self._browse_output_dir).pack(side=LEFT)
 
-        # 输出模式
+        # 输出模式（缩到一行）
         mode_frame = ttk.Frame(fmt_frame)
-        mode_frame.pack(fill=X, pady=(4, 0))
-        ttk.Label(mode_frame, text="输出模式:", font=("Segoe UI", 8, "bold")).pack(side=LEFT, padx=(0, 4))
-        ttk.Radiobutton(mode_frame, text="📁 平铺（推荐，所有 .md 在同一目录）",
-                        variable=self.output_mode_var, value="flat").pack(side=LEFT, padx=(0, 8))
-        ttk.Radiobutton(mode_frame, text="📂 独立子目录",
-                        variable=self.output_mode_var, value="subdir").pack(side=LEFT, padx=(0, 8))
-        ttk.Radiobutton(mode_frame, text="🗜 保留原始 Zip",
-                        variable=self.output_mode_var, value="zip").pack(side=LEFT)
+        mode_frame.pack(fill=X, pady=(2, 0))
+        ttk.Label(mode_frame, text="模式:", font=("Segoe UI", 8, "bold")).pack(side=LEFT, padx=(0, 4))
+        ttk.Radiobutton(mode_frame, text="📁 平铺", variable=self.output_mode_var,
+                        value="flat").pack(side=LEFT, padx=(0, 6))
+        ttk.Radiobutton(mode_frame, text="📂 子目录", variable=self.output_mode_var,
+                        value="subdir").pack(side=LEFT, padx=(0, 6))
+        ttk.Radiobutton(mode_frame, text="🗜 Zip", variable=self.output_mode_var,
+                        value="zip").pack(side=LEFT)
 
         # 右列 - 处理选项
-        opt_frame = ttk.LabelFrame(settings_frame, text="处理选项", padding=10)
+        opt_frame = ttk.LabelFrame(settings_frame, text="处理选项", padding=8)
         opt_frame.pack(side=LEFT, fill=BOTH, expand=True, padx=(5, 0))
 
-        ttk.Checkbutton(opt_frame, text="启用 OCR（文字识别）", variable=self.ocr_var).pack(anchor=W, pady=1)
-        ttk.Label(opt_frame, text="  ⚠ 仅对 pipeline / vlm 模型有效",
-                  foreground="#888", font=("Segoe UI", 8)).pack(anchor=W, padx=20, pady=(0, 2))
-        ttk.Checkbutton(opt_frame, text="启用公式识别", variable=self.formula_var).pack(anchor=W, pady=1)
-        ttk.Checkbutton(opt_frame, text="启用表格识别", variable=self.table_var).pack(anchor=W, pady=1)
+        ttk.Checkbutton(opt_frame, text="OCR（文字识别）", variable=self.ocr_var).pack(anchor=W, pady=0)
+        ttk.Label(opt_frame, text="  ⚠ 仅 pipeline / vlm",
+                  foreground="#888", font=("Segoe UI", 8)).pack(anchor=W, padx=18, pady=(0, 1))
+        ttk.Checkbutton(opt_frame, text="公式识别", variable=self.formula_var).pack(anchor=W, pady=0)
+        ttk.Checkbutton(opt_frame, text="表格识别", variable=self.table_var).pack(anchor=W, pady=0)
         # 限制信息
-        ttk.Separator(opt_frame, orient=HORIZONTAL).pack(fill=X, pady=(8, 4))
-        ttk.Label(opt_frame, text="📋 限制: 单文件 ≤200MB / ≤200页 / 批量 ≤200个",
-                  foreground="#888", font=("Segoe UI", 8)).pack(anchor=W)
+        ttk.Separator(opt_frame, orient=HORIZONTAL).pack(fill=X, pady=(4, 2))
+        ttk.Label(opt_frame, text="📋 ≤200MB  /  ≤200页  /  批量≤200个",
+                  foreground="#888", font=("Segoe UI", 7)).pack(anchor=W)
 
         # 语言选择
         lang_row = ttk.Frame(opt_frame)
-        lang_row.pack(fill=X, pady=(6, 2))
-        ttk.Label(lang_row, text="文档语言:").pack(side=LEFT)
+        lang_row.pack(fill=X, pady=(4, 1))
+        ttk.Label(lang_row, text="语言:", font=("Segoe UI", 8, "bold")).pack(side=LEFT)
         lang_menu = ttk.Combobox(lang_row, textvariable=self.language_var, state="readonly", width=14)
         lang_menu["values"] = [f"{label}" for label, _ in LANGUAGES]
         lang_menu.set("中文")
@@ -385,8 +379,8 @@ class MinerUApp:
 
         # 模型选择
         model_row = ttk.Frame(opt_frame)
-        model_row.pack(fill=X, pady=2)
-        ttk.Label(model_row, text="处理模型:").pack(side=LEFT)
+        model_row.pack(fill=X, pady=1)
+        ttk.Label(model_row, text="模型:", font=("Segoe UI", 8, "bold")).pack(side=LEFT)
         model_menu = ttk.Combobox(model_row, textvariable=self.model_var, state="readonly", width=14)
         model_menu["values"] = [f"{label}" for label, _ in MODELS]
         model_menu.set("pipeline（通用解析）")
@@ -398,7 +392,7 @@ class MinerUApp:
         action_frame = ttk.Frame(tab_main)
         action_frame.pack(fill=X, pady=(0, 6))
         self.start_btn = ttk.Button(action_frame, text="▶ 开始处理", command=self._start_processing,
-                                     width=18)
+                                     width=16)
         self.start_btn.pack(side=LEFT, padx=(0, 8))
         self.cancel_btn = ttk.Button(action_frame, text="■ 取消", command=self._cancel_processing,
                                       width=10, state=DISABLED)
